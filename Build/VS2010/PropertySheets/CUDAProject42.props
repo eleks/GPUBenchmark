@@ -8,7 +8,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup>
     <Link>
-      <AdditionalDependencies>cuda.lib;cudart.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>cuda.lib;cudart.lib;opencl.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <CudaCompile />
     <CudaCompile>

@@ -1,37 +1,134 @@
 #pragma once
-
+ 
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <cassert>
 #include <string>
+#include <sstream>
 #include <exception>
 #include <algorithm>
 
-#ifndef linux
+#ifdef _WIN32
 #define NOMINMAX
+#define OVERRIDE override
 #include <windows.h>
+#else
+#define OVERRIDE
+#include <errno.h>
 #endif
 
-#define DeleteAndNull(a) if (a != NULL) {delete a; a = NULL;}
+#define DISALLOW_COPY_AND_ASSIGN(TypeName) \
+	TypeName(const TypeName&); \
+	TypeName& operator=(const TypeName&)
 
-#ifdef linux
+#define DESTRUCTOR_CATCH(stmts) try { stmts } catch (...) {}
+
+//#define THROW(className, message) throw new className(message, -1, __FILE__, __LINE__)
+//#define THROW(className, ...) throw new className(__VA_ARGS__, __FILE__, __LINE__)
+#define THROW(className, message, errorCode) throw new className(message, errorCode, __FILE__, __LINE__)
+#define NOT_IMPLEMENTED(name) throw new ENotImplemented(name, __FILE__, __LINE__)
+#define NOT_SUPPORTED(name) throw new ENotSupported(name, __FILE__, __LINE__)
+#define NOT_AVAILABLE(name) throw new ENotAvailable(name, __FILE__, __LINE__)
+
+#ifndef _WIN32
 typedef long long __int64;
 typedef char byte;
 #endif
 
-class customException : public std::exception
+#define DEFINE_EXCEPTION_CLASS(className) \
+	class className : public ECustomException { \
+	public: \
+		explicit className(const char *errorMessage, int errorCode = -1, const char *flp = NULL, int line = 0) : \
+			ECustomException(errorMessage, errorCode, flp, line) {} \
+		explicit className(std::string errorMessage, int errorCode = -1, const char *flp = NULL, int line = 0) : \
+			ECustomException(errorMessage, errorCode, flp, line) {} \
+	}
+
+class ECustomException : public std::exception
 {
-	std::string errorMessage;
+private:
+	std::string _errorMessage;
+	int _errorCode;
+	const char *_flp;
+	int _line;
 public:
-	int errorCode;
-	explicit customException(const char *errorMessage) : 
-		errorMessage(errorMessage), errorCode(-1) {}
-	customException(const char *errorMessage, int errorCode) : 
-		errorMessage(errorMessage), errorCode(errorCode) {}
-	customException(const std::string &errorMessage, int errorCode) : 
-		errorMessage(errorMessage), errorCode(errorCode) {}
-	virtual ~customException() throw() {}
-	virtual const char * what() const throw() {return errorMessage.c_str();}
+	explicit ECustomException(const char *errorMessage, int errorCode = -1, const char *flp = NULL, int line = 0) : 
+		_errorMessage(errorMessage), _errorCode(errorCode), _flp(flp), _line(line) {}
+	explicit ECustomException(std::string errorMessage, int errorCode = -1, const char *flp = NULL, int line = 0) : 
+		_errorMessage(errorMessage), _errorCode(errorCode), _flp(flp), _line(line) {}
+
+	virtual ~ECustomException() throw() {}
+	virtual const char * what() const throw() {
+		return _errorMessage.c_str();
+	}
+	virtual std::string message() const {
+		std::stringstream stream;
+		stream << what() << " (Error Code: " << _errorCode;
+		if (_flp)
+			stream << ", file: " << _flp;
+		if (_line)
+			stream << ", line: " << _line;
+		stream << ")";
+		return stream.str();
+	}
+	int errorCode() { 
+		return _errorCode;
+	}
+	int line() { 
+		return _line;
+	}
+	const char * flp() { 
+		return _flp;
+	}
+};
+
+class ENotImplemented : public ECustomException
+{
+private:
+	std::string _name;
+public:
+	explicit ENotImplemented(const char *name, const char *flp = NULL, int line = 0) : 
+		ECustomException("not implemented", -1, flp, line), _name(name) {}
+	virtual ~ENotImplemented() throw() {}
+	virtual std::string message() const OVERRIDE {
+		return _name + std::string(" ") + ECustomException::message();
+	}
+	std::string name() {
+		return _name;
+	}
+};
+
+class ENotSupported : public ECustomException
+{
+private:
+	std::string _name;
+public:
+	explicit ENotSupported(const char *name, const char *flp = NULL, int line = 0) : 
+		ECustomException("not supported", -1, flp, line), _name(name) {}
+	virtual ~ENotSupported() throw() {}
+	virtual std::string message() const OVERRIDE {
+		return _name + std::string(" ") + ECustomException::message();
+	}
+	std::string name() {
+		return _name;
+	}
+};
+
+class ENotAvailable : public ECustomException
+{
+private:
+	std::string _name;
+public:
+	explicit ENotAvailable(const char *name, const char *flp = NULL, int line = 0) : 
+		ECustomException("not available", -1, flp, line), _name(name) {}
+	virtual ~ENotAvailable() throw() {}
+	virtual std::string message() const OVERRIDE {
+		return _name + std::string(" ") + ECustomException::message();
+	}
+	std::string name() {
+		return _name;
+	}
 };
 
 struct TimingCounter {
@@ -51,6 +148,16 @@ void
 	IntToCharBufF(__int64 AValue, char *ABuf, size_t ASize);
 std::string 
 	IntToStrF(__int64 AValue);
+std::string
+	PathDirGet(const char *path);
+std::string
+	PathFLNGet(const char *path);
+std::string 
+	SysErrorMessage(int error);
+int 
+	SysLastErrorGet();
+void 
+	SysLastErrorThrow(const char * name);
 void 
 	SystemPause();
 void 
@@ -67,167 +174,255 @@ double
 	TimingSeconds();
 void
 	TimingStart(TimingCounter &ACounter);
+std::string 
+	WorkingDirGet();
+
+template<class T> class DynArray;
+template<class T> class DynArray2D;
+template<class T> class DynArrayOfArray;
+template<class T> class DynArrayOfArrayOfArray;
+
+class AutoFile
+{
+	DISALLOW_COPY_AND_ASSIGN(AutoFile);
+	FILE *_file;
+	std::string _flp;
+public:
+	AutoFile() : _file(NULL) {};
+	AutoFile(const char *flp, const char *mode) : _file(NULL) {
+		int result = open(flp, mode);
+		if (result != 0)
+			THROW(ECustomException, std::string("Could not open file: ") + std::string(flp) + 
+				std::string(". ") + SysErrorMessage(result), result);
+	};
+	~AutoFile() {
+		DESTRUCTOR_CATCH(
+			close();
+		)
+	};
+	void close() {
+		if (_file != NULL)
+		{
+			FILE *temp = _file;
+			_file = NULL;
+			_flp = "";
+			fclose(temp); 
+		}
+	};
+	int open(const char *flp, const char *mode) {
+		close();
+		_flp = flp;
+		#ifdef _WIN32
+			return fopen_s(&_file, flp, mode);
+		#else
+			_file = fopen(flp, mode);
+			return _file == 0 ? errno : 0;
+		#endif
+	};
+	void write(void *ptr, size_t size) {
+		if (fwrite(ptr, size, 1, _file) != 1)
+		{
+			int result = SysLastErrorGet();
+			THROW(ECustomException, std::string("Failed writing to file: ") + _flp + 
+				std::string(". ") + SysErrorMessage(result), result);
+		}
+	}
+	void read(void *ptr, size_t size) {
+		if (fread(ptr, size, 1, _file) != 1)
+		{
+			int result = SysLastErrorGet();
+			THROW(ECustomException, std::string("Failed reading from file: ") + _flp + 
+				std::string(". ") + SysErrorMessage(result), result);
+		}
+	}
+	int seek(int offset, int origin) { 
+		return fseek(_file, offset, origin); 
+	}
+	int tell() {
+		return ftell(_file);
+	}
+	FILE * file() {
+		return _file;
+	};
+};
 
 template<class T>
-class dynArray
+class DynArray
 {
-	dynArray(const dynArray&);
-	dynArray& operator=(const dynArray&);
-
+	DISALLOW_COPY_AND_ASSIGN(DynArray);
+	T *_ptr;
+	size_t _size;
+	size_t _count;
 public:
-	T *ptr;
-	size_t size;
-	size_t count;
-
-	dynArray() : size(0), count(0), ptr(NULL) {};
-	explicit dynArray(size_t aCount) : ptr(NULL) {
+	DynArray() : _size(0), _count(0), _ptr(NULL) {};
+	explicit DynArray(size_t aCount) : _ptr(NULL) {
 		allocate(aCount);
 	};
-	~dynArray() {
-		release();
+	~DynArray() {
+		DESTRUCTOR_CATCH(
+			release();
+		)
 	};
-	void allocate(size_t aCount) {
+	void allocate(size_t count) {
 		release();
-		count = aCount;
-		size = count * sizeof(T); 
+		_count = count;
+		_size = count * sizeof(T); 
 		if (count > 0)
-			ptr = new T[count];
+			_ptr = new T[count];
 	};
 	void release() {
-		if (ptr == NULL)
+		if (_ptr == NULL)
 			return;
-		delete [] ptr;
-		ptr = NULL;
-		size = 0;
-		count = 0;
+		delete [] _ptr;
+		_ptr = NULL;
+		_size = 0;
+		_count = 0;
 	}
 	T& operator[](size_t index) {
-		return ptr[index];
+		return _ptr[index];
 	};
-#ifdef WIN
-	void saveToFile(const char *FLP) {
-		FILE *file;
-		if (fopen_s(&file, FLP, "wb") != 0)
-			assert(false);
-		if (ptr != NULL)
-			fwrite(ptr, size, 1, file);
-		fclose(file);
+	void loadFromFile(const char *flp) {
+		AutoFile file(flp, "rb");
+		if (_ptr != NULL)
+			file.read(_ptr, _size);
 	}
-#endif
+	void saveToFile(const char *flp) {
+		AutoFile file(flp, "wb");
+		if (_ptr != NULL)
+			file.write(_ptr, _size);
+	}
+	size_t size() {
+		return _size;
+	}
+	size_t count() {
+		return _count;
+	}
+	T* ptr() {
+		return _ptr;
+	}
 };
 
 template<class T>
-class dynArray2D
+class DynArray2D
 {
-	dynArray2D(const dynArray2D&);
-	dynArray2D& operator=(const dynArray2D&);
-
+	DISALLOW_COPY_AND_ASSIGN(DynArray2D);
+	T *_ptr;
+	size_t _size;
+	size_t _dim1;
+	size_t _dim2;
 public:
-	T *ptr;
-	size_t size;
-	size_t dim1;
-	size_t dim2;
-
-	dynArray2D() : size(0), dim1(0), dim2(0), ptr(NULL) {};
-	dynArray2D(size_t dim1, size_t dim2) : ptr(NULL) {
+	DynArray2D() : _size(0), _dim1(0), _dim2(0), _ptr(NULL) {};
+	DynArray2D(size_t dim1, size_t dim2) : _ptr(NULL) {
 		allocate(dim1, dim2);
 	};
-	~dynArray2D() {
-		release();
+	~DynArray2D() {
+		DESTRUCTOR_CATCH(
+			release();
+		)
 	};
-	void allocate(size_t aDim1, size_t aDim2) {
+	void allocate(size_t dim1, size_t dim2) {
 		release();
-		dim1 = aDim1;
-		dim2 = aDim2;
-		size = dim1 * dim2 * sizeof(T); 
-		if (size > 0)
-			ptr = new T[dim1 * dim2];
+		_dim1 = dim1;
+		_dim2 = dim2;
+		_size = dim1 * dim2 * sizeof(T); 
+		if (_size > 0)
+			_ptr = new T[dim1 * dim2];
 	};
 	void release() {
-		if (ptr == NULL)
+		if (_ptr == NULL)
 			return;
-		delete [] ptr;
-		ptr = NULL;
-		size = 0;
-		dim1 = 0;
-		dim2 = 0;
+		delete [] _ptr;
+		_ptr = NULL;
+		_size = 0;
+		_dim1 = 0;
+		_dim2 = 0;
 	}
 	T& operator[](size_t index) {
-		return ptr[index];
+		return _ptr[index];
 	};
 	T& operator()(size_t index1, size_t index2) {
-		return ptr[index1 * dim2 + index2];
+		return _ptr[index1 * _dim2 + index2];
 	};
-#ifdef WIN
-	void saveToFile(const char *FLP) {
-		FILE *file;
-		if (fopen_s(&file, FLP, "wb") != 0)
-			assert(false);
-		if (ptr != NULL)
-			fwrite(ptr, size, 1, file);
-		fclose(file);
+	void loadFromFile(const char *flp) {
+		AutoFile file(flp, "rb");
+		if (_ptr != NULL)
+			file.read(_ptr, _size);
 	}
-#endif
+	void saveToFile(const char *flp) {
+		AutoFile file(flp, "wb");
+		if (_ptr != NULL)
+			file.write(_ptr, _size);
+	}
+	T* ptr() {
+		return _ptr;
+	}
+	size_t dim1() {
+		return _dim1;
+	}
+	size_t dim2() {
+		return _dim2;
+	}
+	size_t size() {
+		return _size;
+	}
 };
 
 template<class T>
-class dynArrayOfArray
+class DynArrayOfArray
 {
-	dynArrayOfArray(const dynArrayOfArray&);
-	dynArrayOfArray& operator=(const dynArrayOfArray&);
-
+	DISALLOW_COPY_AND_ASSIGN(DynArrayOfArray);
+	DynArray<DynArray<T> > _data;
 public:
-	dynArray<dynArray<T> > data;
-
-	dynArrayOfArray() {};
-	dynArrayOfArray(size_t aDim1, size_t aDim2) {
-		allocate(aDim1, aDim2);
+	DynArrayOfArray() {};
+	DynArrayOfArray(size_t dim1, size_t dim2) {
+		allocate(dim1, dim2);
 	};
-	~dynArrayOfArray() {
-		release();
+	~DynArrayOfArray() {
+		DESTRUCTOR_CATCH(
+			release();
+		)
 	};
-	void allocate(size_t aDim1, size_t aDim2) {
-		data.allocate(aDim1);
-		for (int i = 0; i < aDim1; i++)
-			data[i].allocate(aDim2);
+	void allocate(size_t dim1, size_t dim2) {
+		_data.allocate(dim1);
+		for (size_t i = 0; i < dim1; i++)
+			_data[i].allocate(dim2);
 	}
 	void release() {
-		for (int i = 0; i < data.count; i++)
-			data[i].release();
-		data.release();
+		for (size_t i = 0; i < _data.count; i++)
+			_data[i].release();
+		_data.release();
 	}
-	dynArray<T>& operator[](size_t index) {
-		return data[index];
+	DynArray<T>& operator[](size_t index) {
+		return _data[index];
 	};
 };
 
 template<class T>
-class dynArrayOfArrayOfArray
+class DynArrayOfArrayOfArray
 {
-	dynArrayOfArrayOfArray(const dynArrayOfArrayOfArray&);
-	dynArrayOfArrayOfArray& operator=(const dynArrayOfArrayOfArray&);
-
+	DISALLOW_COPY_AND_ASSIGN(DynArrayOfArrayOfArray);
+	DynArray<DynArrayOfArray<T> > _data;
 public:
-	dynArray<dynArrayOfArray<T> > data;
-
-	dynArrayOfArrayOfArray() {};
-	dynArrayOfArrayOfArray(size_t aDim1, size_t aDim2, size_t aDim3) {
-		allocate(aDim1, aDim2, aDim3);
+	DynArrayOfArrayOfArray() {};
+	DynArrayOfArrayOfArray(size_t dim1, size_t dim2, size_t dim3) {
+		allocate(dim1, dim2, dim3);
 	};
-	~dynArrayOfArrayOfArray() {
-		release();
+	~DynArrayOfArrayOfArray() {
+		DESTRUCTOR_CATCH(
+			release();
+		)
 	};
-	void allocate(size_t aDim1, size_t aDim2, size_t aDim3) {
-		data.allocate(aDim1);
-		for (int i = 0; i < aDim1; i++)
-			data[i].allocate(aDim2, aDim3);
+	void allocate(size_t dim1, size_t dim2, size_t dim3) {
+		_data.allocate(dim1);
+		for (size_t i = 0; i < dim1; i++)
+			_data[i].allocate(dim2, dim3);
 	}
 	void release() {
-		for (int i = 0; i < data.count; i++)
-			data[i].release();
-		data.release();
+		for (size_t i = 0; i < _data.count; i++)
+			_data[i].release();
+		_data.release();
 	}
-	dynArrayOfArray<T>& operator[](size_t index) {
-		return data[index];
+	DynArrayOfArray<T>& operator[](size_t index) {
+		return _data[index];
 	};
 };

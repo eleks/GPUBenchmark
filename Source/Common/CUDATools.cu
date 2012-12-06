@@ -1,3 +1,5 @@
+#ifdef CUDA
+
 #include <device_types.h>
 #include "CUDATools.h"
 #include "CUDADeviceTools.h"
@@ -79,9 +81,9 @@ void cuda_arraySum(T *R, T *A, int count)
 		/ CUDA_TOOLS_THREADS_PER_BLOCK, CUDA_TOOLS_MAX_BLOCKS);
 	deviceMem<T> d_temp(blockCount);
 	kernel_arraySum<T><<<min(blockCount, CUDA_TOOLS_MAX_BLOCKS), CUDA_TOOLS_THREADS_PER_BLOCK>>>(
-		d_temp.dptr, A, count);
+		d_temp.dptr(), A, count);
 	kernel_arraySum<T><<<1, CUDA_TOOLS_THREADS_PER_BLOCK>>>(
-		R, d_temp.dptr, blockCount);
+		R, d_temp.dptr(), blockCount);
 }
 
 template<typename T>
@@ -134,11 +136,11 @@ void cuda_arrayStd(T *R, T *A, int count)
 	int blockCount = min((count + CUDA_TOOLS_THREADS_PER_BLOCK - 1) 
 		/ CUDA_TOOLS_THREADS_PER_BLOCK, CUDA_TOOLS_MAX_BLOCKS);
 	deviceMem<T> d_sum(1);
-	cuda_arraySum(d_sum.dptr, A, count);
+	cuda_arraySum(d_sum.dptr(), A, count);
 
 	deviceMem<T> d_temp(blockCount);
-	kernel_arrayStd_step1<T><<<blockCount, CUDA_TOOLS_THREADS_PER_BLOCK>>>(d_temp.dptr, A, count, d_sum.dptr);
-	kernel_arraySum<T><<<1, CUDA_TOOLS_THREADS_PER_BLOCK>>>(R, d_temp.dptr, blockCount);
+	kernel_arrayStd_step1<T><<<blockCount, CUDA_TOOLS_THREADS_PER_BLOCK>>>(d_temp.dptr(), A, count, d_sum.dptr());
+	kernel_arraySum<T><<<1, CUDA_TOOLS_THREADS_PER_BLOCK>>>(R, d_temp.dptr(), blockCount);
 	kernel_arrayStd_step2<T><<<1, 1>>>(R, count);
 }
 
@@ -158,3 +160,5 @@ template void cuda_arraySum<double>(double *R, double *A, int count);
 template void cuda_arrayStd<int>(int *R, int *A, int count);
 template void cuda_arrayStd<float>(float *R, float *A, int count);
 template void cuda_arrayStd<double>(double *R, double *A, int count);
+
+#endif

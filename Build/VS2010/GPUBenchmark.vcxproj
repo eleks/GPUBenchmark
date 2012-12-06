@@ -183,7 +183,16 @@
     </Link>
     <CudaCompile>
       <FastMath>true</FastMath>
+      <Defines>
+      </Defines>
     </CudaCompile>
+    <CudaLink />
+    <PreBuildEvent>
+      <Command>copy $(SolutionDir)..\..\Source\GPUBenchmark.cl $(TargetDir)</Command>
+    </PreBuildEvent>
+    <PreBuildEvent>
+      <Message>OpenCL files copying</Message>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug_CUDA42|Win32'">
     <ClCompile>
@@ -199,7 +208,15 @@
     </Link>
     <CudaCompile>
       <FastMath>true</FastMath>
+      <Defines>
+      </Defines>
     </CudaCompile>
+    <PreBuildEvent>
+      <Command>copy $(SolutionDir)..\..\Source\GPUBenchmark.cl $(TargetDir)</Command>
+    </PreBuildEvent>
+    <PreBuildEvent>
+      <Message>OpenCL files copying</Message>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug_CUDA50|x64'">
     <ClCompile>
@@ -215,7 +232,20 @@
     </Link>
     <CudaCompile>
       <FastMath>true</FastMath>
+      <Defines>
+      </Defines>
     </CudaCompile>
+    <CudaLink />
+    <CudaLink>
+      <AdditionalLibraryDirectories>
+      </AdditionalLibraryDirectories>
+    </CudaLink>
+    <PreBuildEvent>
+      <Command>copy $(SolutionDir)..\..\Source\GPUBenchmark.cl $(TargetDir)</Command>
+    </PreBuildEvent>
+    <PreBuildEvent>
+      <Message>OpenCL files copying</Message>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug_CUDA42|x64'">
     <ClCompile>
@@ -223,7 +253,7 @@
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>CUDA;OpenCL;WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -231,7 +261,14 @@
     </Link>
     <CudaCompile>
       <FastMath>true</FastMath>
+      <Defines>CUDA;OpenCL</Defines>
     </CudaCompile>
+    <PreBuildEvent>
+      <Command>copy $(SolutionDir)..\..\Source\GPUBenchmark.cl $(TargetDir)</Command>
+    </PreBuildEvent>
+    <PreBuildEvent>
+      <Message>OpenCL files copying</Message>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release_CUDA50|Win32'">
     <ClCompile>
@@ -252,7 +289,16 @@
     <CudaCompile>
       <Optimization>O2</Optimization>
       <FastMath>true</FastMath>
+      <Defines>
+      </Defines>
     </CudaCompile>
+    <CudaLink />
+    <PreBuildEvent>
+      <Command>copy $(SolutionDir)..\..\Source\GPUBenchmark.cl $(TargetDir)</Command>
+    </PreBuildEvent>
+    <PreBuildEvent>
+      <Message>OpenCL files copying</Message>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release_CUDA42|Win32'">
     <ClCompile>
@@ -273,7 +319,15 @@
     <CudaCompile>
       <Optimization>O2</Optimization>
       <FastMath>true</FastMath>
+      <Defines>
+      </Defines>
     </CudaCompile>
+    <PreBuildEvent>
+      <Command>copy $(SolutionDir)..\..\Source\GPUBenchmark.cl $(TargetDir)</Command>
+    </PreBuildEvent>
+    <PreBuildEvent>
+      <Message>OpenCL files copying</Message>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release_CUDA50|x64'">
     <ClCompile>
@@ -296,7 +350,16 @@
     <CudaCompile>
       <Optimization>O2</Optimization>
       <FastMath>true</FastMath>
+      <Defines>
+      </Defines>
     </CudaCompile>
+    <CudaLink />
+    <PreBuildEvent>
+      <Command>copy $(SolutionDir)..\..\Source\GPUBenchmark.cl $(TargetDir)</Command>
+    </PreBuildEvent>
+    <PreBuildEvent>
+      <Message>OpenCL files copying</Message>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release_CUDA42|x64'">
     <ClCompile>
@@ -306,7 +369,7 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>CUDA;OpenCL;WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -319,23 +382,41 @@
       <AdditionalCompilerOptions>
       </AdditionalCompilerOptions>
       <FastMath>true</FastMath>
+      <Defines>CUDA;OpenCL</Defines>
     </CudaCompile>
+    <PreBuildEvent>
+      <Command>copy $(SolutionDir)..\..\Source\GPUBenchmark.cl $(TargetDir)</Command>
+    </PreBuildEvent>
+    <PreBuildEvent>
+      <Message>OpenCL files copying</Message>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\..\Source\Common\CTools.cpp" />
     <ClCompile Include="..\..\Source\Common\CUDATools.cpp" />
+    <ClCompile Include="..\..\Source\Common\OpenCLTools.cpp" />
     <ClCompile Include="..\..\Source\GPUBenchmark.cpp" />
+    <ClCompile Include="..\..\Source\GPUBenchmarkOpenCL.cpp" />
+    <ClCompile Include="..\..\Source\GPUBenchmarkCUDA.cpp" />
     <ClCompile Include="..\..\Source\Main.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\Source\Common\CTools.h" />
     <ClInclude Include="..\..\Source\Common\CUDADeviceTools.h" />
     <ClInclude Include="..\..\Source\Common\CUDATools.h" />
+    <ClInclude Include="..\..\Source\Common\OpenCLTools.h" />
     <ClInclude Include="..\..\Source\GPUBenchmark.h" />
+    <ClInclude Include="..\..\Source\GPUBenchmarkOpenCL.h" />
+    <ClInclude Include="..\..\Source\GPUBenchmarkCUDA.h" />
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="..\..\Source\Common\CUDATools.cu" />
     <CudaCompile Include="..\..\Source\GPUBenchmark.cu" />
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="..\..\Source\GPUBenchmark.cl">
+      <FileType>Document</FileType>
+    </CustomBuild>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

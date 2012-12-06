@@ -1,3 +1,5 @@
+#ifdef CUDA
+
 #pragma once
 
 #include <cstdlib>
@@ -14,7 +16,9 @@
 #define CUDA_TOOLS_THREADS_PER_BLOCK	128
 #define CUDA_TOOLS_MAX_BLOCKS			256
 
-using namespace std;
+#define CUDA_SAFECALL(error) cudaSafeCall(error, __FILE__, __LINE__)
+#define CUFFT_SAFECALL(error) cufftSafeCall(error, __FILE__, __LINE__)
+#define CURAND_SAFECALL(error) curandSafeCall(error, __FILE__, __LINE__)
 
 void 
 	cudaDevicePropertiesDump();
@@ -23,29 +27,15 @@ size_t
 void 
 	cudaMemInfoDump();
 void 
-	cudaSafeCall(cudaError AError);
+	cudaSafeCall(cudaError error, const char *flp = NULL, int line = 0);
 void 
-	cufftSafeCall(cufftResult AResult);
+	cufftSafeCall(cufftResult result, const char *flp = NULL, int line = 0);
 void 
-	curandSafeCall(curandStatus_t status);
+	curandSafeCall(curandStatus_t status, const char *flp = NULL, int line = 0);
 
-class cudaException : public customException {
-public:
-	cudaException(const char *errorMessage, int errorCode) : 
-		customException(errorMessage, errorCode) {}
-};
-
-class cufftException : public customException {
-public:
-	cufftException(const char *errorMessage, int errorCode) : 
-		customException(errorMessage, errorCode) {}
-};
-
-class curandException : public customException {
-public:
-	curandException(const char *errorMessage, int errorCode) : 
-		customException(errorMessage, errorCode) {}
-};
+DEFINE_EXCEPTION_CLASS(ECUDAException);
+DEFINE_EXCEPTION_CLASS(ECUFFTException);
+DEFINE_EXCEPTION_CLASS(ECURANDException);
 
 template<class T> class deviceMem;
 template<class T> class hostMem;
@@ -54,201 +44,223 @@ template<class T> class mappedMem;
 template<class T>
 class deviceMem
 {
-	deviceMem(const deviceMem&);
-	deviceMem& operator=(const deviceMem&);
+	DISALLOW_COPY_AND_ASSIGN(deviceMem);
+	T *_dptr;
+	size_t _size;
 public:
-	T *dptr;
-	size_t size;
-
-	deviceMem() : size(0), dptr(NULL) {};
-	deviceMem(size_t count) : dptr(NULL) {
+	deviceMem() : _size(0), _dptr(NULL) {}
+	deviceMem(size_t count) : _dptr(NULL) {
 		allocate(count);
-	};
+	}
 	~deviceMem() {
-		release();
-	};
+		DESTRUCTOR_CATCH(
+			release();
+		)
+	}
 	void allocate(size_t count) {
 		release(); 
-		size = count * sizeof(T); 
-		cudaSafeCall(cudaMalloc((void**)&dptr, size));
-	};
+		_size = count * sizeof(T); 
+		CUDA_SAFECALL(cudaMalloc((void**)&_dptr, _size));
+	}
 	void release() {
-		if (dptr == NULL)
+		if (_dptr == NULL)
 			return;
-		cudaSafeCall(cudaFree(dptr)); 
-		dptr = NULL; 
-		size = 0;
-	};
+		CUDA_SAFECALL(cudaFree(_dptr)); 
+		_dptr = NULL; 
+		_size = 0;
+	}
 	void clear() {
-		cudaSafeCall(cudaMemset(dptr, 0, size));
+		CUDA_SAFECALL(cudaMemset(_dptr, 0, _size));
 	}
 	void copyFrom(T *hptr) {
-		cudaSafeCall(cudaMemcpy(dptr, hptr, size, cudaMemcpyHostToDevice));
-	};
+		CUDA_SAFECALL(cudaMemcpy(_dptr, hptr, _size, cudaMemcpyHostToDevice));
+	}
 	void copyFrom(hostMem<T> &mem) {
-		copyFrom(mem.hptr);
-	};
+		copyFrom(mem.hptr());
+	}
 	void copyFromAsync(T *hptr, cudaStream_t stream = 0) {
-		cudaSafeCall(cudaMemcpyAsync(dptr, hptr, size, cudaMemcpyHostToDevice, stream));
-	};
+		CUDA_SAFECALL(cudaMemcpyAsync(_dptr, hptr, _size, cudaMemcpyHostToDevice, stream));
+	}
 	void copyFromAsync(hostMem<T> &mem, cudaStream_t stream = 0) {
-		copyFromAsync(mem.hptr, stream);
-	};
+		copyFromAsync(mem.hptr(), stream);
+	}
 	void copyTo(T *hptr) {
-		cudaSafeCall(cudaMemcpy(hptr, dptr, size, cudaMemcpyDeviceToHost));
-	};
+		CUDA_SAFECALL(cudaMemcpy(hptr, _dptr, _size, cudaMemcpyDeviceToHost));
+	}
 	void copyTo(hostMem<T> &mem) {
-		copyTo(mem.hptr);
-	};
+		copyTo(mem.hptr());
+	}
 	void copyTo(deviceMem<T> &mem) {
-		cudaSafeCall(cudaMemcpy(mem.dptr, dptr, size, cudaMemcpyDeviceToDevice));
-	};
+		CUDA_SAFECALL(cudaMemcpy(mem.dptr(), _dptr, _size, cudaMemcpyDeviceToDevice));
+	}
 	void copyToAsync(T *hptr, cudaStream_t stream = 0) {
-		cudaSafeCall(cudaMemcpyAsync(hptr, dptr, size, cudaMemcpyDeviceToHost, stream));
-	};
+		CUDA_SAFECALL(cudaMemcpyAsync(hptr, _dptr, _size, cudaMemcpyDeviceToHost, stream));
+	}
 	void copyToAsync(hostMem<T> &mem, cudaStream_t stream = 0) {
-		copyToAsync(mem.hptr, stream);
-	};
+		copyToAsync(mem.hptr(), stream);
+	}
 	void copyToAsync(deviceMem<T> &mem, cudaStream_t stream = 0) {
-		cudaSafeCall(cudaMemcpyAsync(mem.dptr, dptr, size, cudaMemcpyDeviceToDevice, stream));
-	};
+		CUDA_SAFECALL(cudaMemcpyAsync(mem.dptr(), _dptr, _size, cudaMemcpyDeviceToDevice, stream));
+	}
+	T* dptr() {
+		return _dptr;
+	}
+	size_t size() {
+		return _size;
+	}
 };
 
-enum hostMemType {hmtRegular = 0, hmtSpecial = 1};
+enum CUDA_HostMemType {cudahmtRegular = 0, cudahmtSpecial = 1};
 
 template<class T>
 class hostMem
 {
-	hostMem(const hostMem&);
-	hostMem& operator=(const hostMem&);
-
+	DISALLOW_COPY_AND_ASSIGN(hostMem);
+	T *_hptr;
+	size_t _size;
+	unsigned int _flags;
+	CUDA_HostMemType _type;
 public:
-	T *hptr;
-	size_t size;
-	unsigned int flags;
-	hostMemType type;
-
-	hostMem() : type(hmtRegular), size(0), hptr(NULL) {};
-	hostMem(size_t count, unsigned int flags) : type(hmtSpecial), flags(flags), hptr(NULL) {
+	hostMem() : _type(cudahmtRegular), _size(0), _hptr(NULL) {}
+	hostMem(size_t count, unsigned int flags) : _type(cudahmtSpecial), _flags(flags), _hptr(NULL) {
 		allocate(count);
-	};
-	hostMem(size_t count) : type(hmtRegular), flags(0), hptr(NULL) {
+	}
+	hostMem(size_t count) : _type(cudahmtRegular), _flags(0), _hptr(NULL) {
 		allocate(count);
-	};
+	}
 	~hostMem() {
-		release();
-	};
+		DESTRUCTOR_CATCH(
+			release();
+		)
+	}
 	void allocate(size_t count) {
-		assert(type == hmtRegular || type == hmtSpecial);
+		assert(_type == cudahmtRegular || _type == cudahmtSpecial);
 		release();
-		size = count * sizeof(T); 
-		if (type == hmtRegular)
-			hptr = new T[count];
+		_size = count * sizeof(T); 
+		if (_type == cudahmtRegular)
+			_hptr = new T[count];
 		else
-			cudaSafeCall(cudaHostAlloc((void**)&hptr, size, flags));
-	};
+			CUDA_SAFECALL(cudaHostAlloc((void**)&_hptr, _size, _flags));
+	}
 	void allocate(size_t count, unsigned int aFlags) {
 		release();
-		type = hmtSpecial;
-		flags = aFlags;
-		size = count * sizeof(T); 
-		cudaSafeCall(cudaHostAlloc((void**)&hptr, size, flags));
-	};
+		_type = cudahmtSpecial;
+		_flags = aFlags;
+		_size = count * sizeof(T); 
+		CUDA_SAFECALL(cudaHostAlloc((void**)&_hptr, _size, _flags));
+	}
 	void release() {
-		assert(type == hmtRegular || type == hmtSpecial);
-		if (hptr == NULL)
+		assert(_type == cudahmtRegular || _type == cudahmtSpecial);
+		if (_hptr == NULL)
 			return;
-		if (type == hmtRegular)
-			delete [] hptr;
+		if (_type == cudahmtRegular)
+			delete [] _hptr;
 		else
-			cudaSafeCall(cudaFreeHost(hptr)); 
-		hptr = NULL;
-		size = 0;
+			CUDA_SAFECALL(cudaFreeHost(_hptr)); 
+		_hptr = NULL;
+		_size = 0;
 	}
 	T& operator[](size_t index) {
-		return hptr[index];
-	};
-	void copyFrom(deviceMem<T> &mem) {
-		cudaSafeCall(cudaMemcpy(hptr, mem.dptr, size, cudaMemcpyDeviceToHost));
-	};
-	void copyFromAsync(deviceMem<T> &mem, cudaStream_t stream = 0) {
-		cudaSafeCall(cudaMemcpyAsync(hptr, mem.dptr, size, cudaMemcpyDeviceToHost, stream));
-	};
-	void copyTo(deviceMem<T> &mem) {
-		cudaSafeCall(cudaMemcpy(mem.dptr, hptr, size, cudaMemcpyHostToDevice));
-	};
-	void copyToAsync(deviceMem<T> &mem, cudaStream_t stream = 0) {
-		cudaSafeCall(cudaMemcpyAsync(mem.dptr, hptr, size, cudaMemcpyHostToDevice, stream));
-	};
-#ifndef linux
-	void saveToFile(const char *FLP) {
-		FILE *file;
-		if (fopen_s(&file, FLP, "wb") != 0)
-			assert(false);
-		if (hptr != NULL)
-			fwrite(hptr, size, 1, file);
-		fclose(file);
+		return _hptr[index];
 	}
-#endif
+	void copyFrom(deviceMem<T> &mem) {
+		CUDA_SAFECALL(cudaMemcpy(_hptr, mem.dptr(), _size, cudaMemcpyDeviceToHost));
+	}
+	void copyFromAsync(deviceMem<T> &mem, cudaStream_t stream = 0) {
+		CUDA_SAFECALL(cudaMemcpyAsync(_hptr, mem.dptr(), _size, cudaMemcpyDeviceToHost, stream));
+	}
+	void copyTo(deviceMem<T> &mem) {
+		CUDA_SAFECALL(cudaMemcpy(mem.dptr(), _hptr, _size, cudaMemcpyHostToDevice));
+	}
+	void copyToAsync(deviceMem<T> &mem, cudaStream_t stream = 0) {
+		CUDA_SAFECALL(cudaMemcpyAsync(mem.dptr(), _hptr, _size, cudaMemcpyHostToDevice, stream));
+	}
+	void loadFromFile(const char *flp) {
+		AutoFile file(flp, "rb");
+		if (_hptr != NULL)
+			file.read(_hptr, _size);
+	}
+	void saveToFile(const char *flp) {
+		AutoFile file(flp, "wb");
+		if (_hptr != NULL)
+			file.write(_hptr, _size);
+	}
+	T * hptr() {
+		return _hptr;
+	}
+	size_t size() {
+		return _size;
+	}
 };
 
-enum mappedMemType {mmtNone = 0, mmtAlloc = 1, mmtRegisterHost = 2};
+enum CUDA_MappedMemType {cudammtNone = 0, cudammtAlloc = 1, cudammtRegisterHost = 2};
 
 template<class T>
 class mappedMem
 {
-	mappedMem(const mappedMem&);
-	mappedMem& operator=(const mappedMem&);
+	DISALLOW_COPY_AND_ASSIGN(mappedMem);
+	T *_hptr;
+	T *_dptr;
+	size_t _size;
+	CUDA_MappedMemType _type;
 public:
-	T *hptr;
-	T *dptr;
-	size_t size;
-	mappedMemType type;
-
-	mappedMem() : size(0), hptr(NULL), dptr(NULL), type(mmtNone) {};
-	mappedMem(size_t count) : hptr(NULL), dptr(NULL), type(mmtNone) {
+	mappedMem() : _size(0), _hptr(NULL), _dptr(NULL), _type(cudammtNone) {}
+	mappedMem(size_t count) : _hptr(NULL), _dptr(NULL), _type(cudammtNone) {
 		allocate(count);
-	};
+	}
 	~mappedMem() {
-		release();
-	};
+		DESTRUCTOR_CATCH(
+			release();
+		)
+	}
 	void allocate(size_t count) {
 		release(); 
-		size = count * sizeof(T); 
-		type = mmtAlloc;
-		cudaSafeCall(cudaHostAlloc((void**)&hptr, size, cudaHostAllocMapped)); 
-		cudaSafeCall(cudaHostGetDevicePointer((void**)&dptr, hptr, 0));
-	};
-	void registerHost(T *hostPtr, size_t count) {
+		_size = count * sizeof(T); 
+		_type = cudammtAlloc;
+		CUDA_SAFECALL(cudaHostAlloc((void**)&_hptr, _size, cudaHostAllocMapped)); 
+		CUDA_SAFECALL(cudaHostGetDevicePointer((void**)&_dptr, _hptr, 0));
+	}
+	void registerHost(T *hptr, size_t count) {
 		release(); 
-		size = count * sizeof(T); 
-		type = mmtRegisterHost;
-		cudaSafeCall(cudaHostRegister(hostPtr, size, cudaHostRegisterMapped)); 
-		hptr = hostPtr;
-		cudaSafeCall(cudaHostGetDevicePointer((void**)&dptr, hptr, 0));
-	};
+		_size = count * sizeof(T); 
+		_type = cudammtRegisterHost;
+		CUDA_SAFECALL(cudaHostRegister(hptr, _size, cudaHostRegisterMapped)); 
+		_hptr = hptr;
+		CUDA_SAFECALL(cudaHostGetDevicePointer((void**)&_dptr, _hptr, 0));
+	}
 	void release() {
-		if (type == mmtNone)
+		if (_type == cudammtNone)
 			return;
-		if (hptr == NULL)
+		if (_hptr == NULL)
 		{
-			type = mmtNone;
+			_type = cudammtNone;
 			return;
 		}
-		assert(type == mmtAlloc || type == mmtRegisterHost);
-		if (type == mmtAlloc) 
-			cudaSafeCall(cudaFreeHost(hptr)); 
-		if (type == mmtRegisterHost) 
-			cudaSafeCall(cudaHostUnregister(hptr));
-		type = mmtNone;
-		hptr = NULL; 
-		dptr = NULL;
-		size = 0;
-	};
-	T& operator[](size_t index) {return hptr[index];};
+		assert(_type == cudammtAlloc || _type == cudammtRegisterHost);
+		if (_type == cudammtAlloc) 
+			CUDA_SAFECALL(cudaFreeHost(_hptr));
+		if (_type == cudammtRegisterHost)
+			CUDA_SAFECALL(cudaHostUnregister(_hptr));
+		_type = cudammtNone;
+		_hptr = NULL; 
+		_dptr = NULL;
+		_size = 0;
+	}
+	T& operator[](size_t index) {return _hptr[index];};
+	T * hptr() {
+		return _hptr;
+	}
+	T * dptr() {
+		return _dptr;
+	}
+	size_t size() {
+		return _size;
+	}
 };
 
 template<class T> void cuda_arraySub(T *A, T b, int count);
 template<class T> void cuda_arrayMax(T *R, T *A, T b, int count);
 template<class T> void cuda_arraySum(T *R, T *A, int count);
 template<class T> void cuda_arrayStd(T *R, T *A, int count);
+
+#endif

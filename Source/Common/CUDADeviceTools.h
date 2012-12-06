@@ -1,3 +1,5 @@
+#ifdef CUDA
+
 #pragma once
 
 //#define DEVICE_CLOCK_FREQUENCY 1215000000 //!! GTX 470
@@ -64,3 +66,5 @@ __device__ void DTimingStart(DTimingCounter &ACounter)
 {
 	ACounter.Counter = clock64();
 }
+
+#endif

@@ -15,13 +15,13 @@
       <CodeGeneration>compute_35,sm_35</CodeGeneration>
       <AdditionalCompilerOptions>
       </AdditionalCompilerOptions>
-      <AdditionalOptions>-keep -dc %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>-arch=sm_35 -dc -keep %(AdditionalOptions)</AdditionalOptions>
     </CudaCompile>
     <ClCompile>
       <PreprocessorDefinitions>CUDA50;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <CudaLink>
-      <AdditionalOptions>-rdc=true %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>-arch=sm_35 -rdc=true %(AdditionalOptions)</AdditionalOptions>
     </CudaLink>
   </ItemDefinitionGroup>
   <ItemGroup />

@@ -1,26 +1,57 @@
 #include "Common/CTools.h"
 #include "Common/CUDATools.h"
-#include "GPUBenchmark.h"
+#include "Common/OpenCLTools.h"
+#include "GPUBenchmarkCUDA.h"
+#include "GPUBenchmarkOpenCL.h"
+
+int usageShow()
+{
+	printf("Usage:   GPUBenchmark [CUDA|OpenCL]\n");
+	printf("Example: GPUBenchmark CUDA\n");
+	return 0;
+}
 
 int main(int argc, char * argv[])
 {
 	try
 	{
-		printf("Started GPUBenchmark\n");
+		if (argc <= 1 || argc > 2)
+			return usageShow();
+
 		TimingInitialize();
-
-		GPUBenchmark benchmark;
-		benchmark.run();
-
+		if (strcmp(argv[1], "OpenCL") == 0)
+		{
+			printf("Started GPUBenchmark using OpenCL\n");
+			#ifdef OpenCL
+				GPUBenchmarkCL benchmark(PathDirGet(argv[0]));
+				benchmark.run();
+			#else
+				printf("ERROR: Not compiled with OpenCL define\n");
+			#endif
+		}
+		else
+		if (strcmp(argv[1], "CUDA") == 0)
+		{
+			printf("Started GPUBenchmark using CUDA\n");
+			#ifdef CUDA
+				GPUBenchmarkCUDA benchmark;
+				benchmark.run();
+			#else
+				printf("ERROR: Not compiled with CUDA define\n");
+			#endif
+		} else
+			return usageShow();
 		printf("Completed successfully\n");
+		SystemPause();
+		return 0;
 	}
-	catch (customException *E) 
+	catch (ECustomException *E) 
 	{
-		printf("Exception: %s (Error Code: %d)\n", E->what(), E->errorCode);
+		printf("Exception: %s\n", E->message().c_str());
 		SystemPause();
 		return 1;
 	}
-	catch (exception *E) 
+	catch (std::exception *E) 
 	{
 		printf("Exception: %s\n", E->what());
 		SystemPause();
@@ -30,8 +61,6 @@ int main(int argc, char * argv[])
 	{
 		printf("Unknown exception occured\n");
 		SystemPause();
-		return 1;
+		return SysLastErrorGet(); //!!
 	}
-	SystemPause();
-	return 0;
 }

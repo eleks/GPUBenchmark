@@ -1,3 +1,5 @@
+#ifdef CUDA
+
 #include <device_types.h>
 #include "Common/CUDATools.h"
 #include "Common/CUDADeviceTools.h"
@@ -167,10 +169,8 @@ void cuda_notAlignedWrite(T *data, int count, int repeatCount, int blockCount, i
 }
 
 template<typename T> 
-void cuda_reductionSum(T *data, T *sum, int count, int repeatCount, int blockCount, int threadsPerBlock)
+void cuda_reductionSum(T *data, T *sum, T *temp, int count, int repeatCount, int blockCount, int threadsPerBlock)
 {
-	deviceMem<T> temp;
-	temp.allocate(blockCount);
 	switch (threadsPerBlock)
 	{
 	case 1:
@@ -179,28 +179,28 @@ void cuda_reductionSum(T *data, T *sum, int count, int repeatCount, int blockCou
 	case 8:
 	case 16:
 	case 32:
-		kernel_reductionSum<T, 32><<<blockCount, threadsPerBlock>>>(data, temp.dptr, count, repeatCount);
-		kernel_reductionSum<T, 32><<<1, threadsPerBlock>>>(temp.dptr, sum, blockCount, 1);
+		kernel_reductionSum<T, 32><<<blockCount, threadsPerBlock>>>(data, temp, count, repeatCount);
+		kernel_reductionSum<T, 32><<<1, threadsPerBlock>>>(temp, sum, blockCount, repeatCount);
 		break;
 	case 64:
-		kernel_reductionSum<T, 64><<<blockCount, threadsPerBlock>>>(data, temp.dptr, count, repeatCount);
-		kernel_reductionSum<T, 64><<<1, threadsPerBlock>>>(temp.dptr, sum, blockCount, 1);
+		kernel_reductionSum<T, 64><<<blockCount, threadsPerBlock>>>(data, temp, count, repeatCount);
+		kernel_reductionSum<T, 64><<<1, threadsPerBlock>>>(temp, sum, blockCount, repeatCount);
 		break;
 	case 128:
-		kernel_reductionSum<T, 128><<<blockCount, threadsPerBlock>>>(data, temp.dptr, count, repeatCount);
-		kernel_reductionSum<T, 128><<<1, threadsPerBlock>>>(temp.dptr, sum, blockCount, 1);
+		kernel_reductionSum<T, 128><<<blockCount, threadsPerBlock>>>(data, temp, count, repeatCount);
+		kernel_reductionSum<T, 128><<<1, threadsPerBlock>>>(temp, sum, blockCount, repeatCount);
 		break;
 	case 256:
-		kernel_reductionSum<T, 256><<<blockCount, threadsPerBlock>>>(data, temp.dptr, count, repeatCount);
-		kernel_reductionSum<T, 256><<<1, threadsPerBlock>>>(temp.dptr, sum, blockCount, 1);
+		kernel_reductionSum<T, 256><<<blockCount, threadsPerBlock>>>(data, temp, count, repeatCount);
+		kernel_reductionSum<T, 256><<<1, threadsPerBlock>>>(temp, sum, blockCount, repeatCount);
 		break;
 	case 512:
-		kernel_reductionSum<T, 512><<<blockCount, threadsPerBlock>>>(data, temp.dptr, count, repeatCount);
-		kernel_reductionSum<T, 512><<<1, threadsPerBlock>>>(temp.dptr, sum, blockCount, 1);
+		kernel_reductionSum<T, 512><<<blockCount, threadsPerBlock>>>(data, temp, count, repeatCount);
+		kernel_reductionSum<T, 512><<<1, threadsPerBlock>>>(temp, sum, blockCount, repeatCount);
 		break;
 	case 1024:
-		kernel_reductionSum<T, 1024><<<blockCount, threadsPerBlock>>>(data, temp.dptr, count, repeatCount);
-		kernel_reductionSum<T, 1024><<<1, threadsPerBlock>>>(temp.dptr, sum, blockCount, 1);
+		kernel_reductionSum<T, 1024><<<blockCount, threadsPerBlock>>>(data, temp, count, repeatCount);
+		kernel_reductionSum<T, 1024><<<1, threadsPerBlock>>>(temp, sum, blockCount, repeatCount);
 		break;
 	}
 }
@@ -260,7 +260,56 @@ __global__ void kernel_doAdd(int count)
 			printf("sum: %f", value);
 	}
 }
+/*
+template<> 
+__global__ void kernel_doAdd<float>(int count)
+{
+	int bulkCount = count >> 5;
+	for (int i = 0; i < bulkCount; i++)
+	{
+		float4 value;
+		value.x = i;
+		value.y = value.x + 1.0f;
+		value.z = value.x + 2.0f;
+		value.w = value.x + 3.0f;
 
+		value.x = value.x + value.x;
+		value.y = value.y + value.y;
+		value.z = value.z + value.z;
+		value.w = value.w + value.w;
+		value.x = value.x + value.x;
+		value.y = value.y + value.y;
+		value.z = value.z + value.z;
+		value.w = value.w + value.w;
+		value.x = value.x + value.x;
+		value.y = value.y + value.y;
+		value.z = value.z + value.z;
+		value.w = value.w + value.w;
+		value.x = value.x + value.x;
+		value.y = value.y + value.y;
+		value.z = value.z + value.z;
+		value.w = value.w + value.w;
+		value.x = value.x + value.x;
+		value.y = value.y + value.y;
+		value.z = value.z + value.z;
+		value.w = value.w + value.w;
+		value.x = value.x + value.x;
+		value.y = value.y + value.y;
+		value.z = value.z + value.z;
+		value.w = value.w + value.w;
+		value.x = value.x + value.x;
+		value.y = value.y + value.y;
+		value.z = value.z + value.z;
+		value.w = value.w + value.w;
+		value.x = value.x + value.x;
+		value.y = value.y + value.y;
+		value.z = value.z + value.z;
+		value.w = value.w + value.w;
+		if (threadIdx.x > 1024) // to avoid removal by optimization
+			printf("sum: %f,%f,%f,%f", value.x, value.y, value.z, value.w);
+	}
+}
+*/
 template<typename T> 
 void cuda_doAdd(int count, int blockCount, int threadCount)
 {
@@ -268,100 +317,205 @@ void cuda_doAdd(int count, int blockCount, int threadCount)
 }
 
 template<typename T> 
-__global__ void kernel_doAdd2(int count)
+__global__ void kernel_doAdd_indep(int count)
 {
-	int bulkCount = count >> 5;
+	int bulkCount = count >> 6;
 	for (int i = 0; i < bulkCount; i++)
 	{
-		T value1 = i, value2 = (T)1.0 + i, value3 = (T)2.0 + i;
+		T value1 = i, value2 = (T)1.0 + i, value3 = (T)2.0 + i, value4 = (T)3.0 + i;
 		value1 = value1 + value1;
 		value2 = value2 + value2;
 		value3 = value3 + value3;
+		value4 = value4 + value4;
 		value1 = value1 + value1;
 		value2 = value2 + value2;
 		value3 = value3 + value3;
+		value4 = value4 + value4;
 		value1 = value1 + value1;
 		value2 = value2 + value2;
 		value3 = value3 + value3;
+		value4 = value4 + value4;
 		value1 = value1 + value1;
 		value2 = value2 + value2;
 		value3 = value3 + value3;
+		value4 = value4 + value4;
 		value1 = value1 + value1;
 		value2 = value2 + value2;
 		value3 = value3 + value3;
+		value4 = value4 + value4;
 		value1 = value1 + value1;
 		value2 = value2 + value2;
 		value3 = value3 + value3;
+		value4 = value4 + value4;
 		value1 = value1 + value1;
 		value2 = value2 + value2;
 		value3 = value3 + value3;
+		value4 = value4 + value4;
 		value1 = value1 + value1;
 		value2 = value2 + value2;
 		value3 = value3 + value3;
+		value4 = value4 + value4;
 		value1 = value1 + value1;
 		value2 = value2 + value2;
 		value3 = value3 + value3;
+		value4 = value4 + value4;
 		value1 = value1 + value1;
 		value2 = value2 + value2;
 		value3 = value3 + value3;
+		value4 = value4 + value4;
+		value1 = value1 + value1;
+		value2 = value2 + value2;
+		value3 = value3 + value3;
+		value4 = value4 + value4;
+		value1 = value1 + value1;
+		value2 = value2 + value2;
+		value3 = value3 + value3;
+		value4 = value4 + value4;
+		value1 = value1 + value1;
+		value2 = value2 + value2;
+		value3 = value3 + value3;
+		value4 = value4 + value4;
+		value1 = value1 + value1;
+		value2 = value2 + value2;
+		value3 = value3 + value3;
+		value4 = value4 + value4;
+		value1 = value1 + value1;
+		value2 = value2 + value2;
+		value3 = value3 + value3;
+		value4 = value4 + value4;
+		value1 = value1 + value1;
+		value2 = value2 + value2;
+		value3 = value3 + value3;
+		value4 = value4 + value4;
 		if (threadIdx.x > 1024) // to avoid removal by optimization
-			printf("sum: %f, %f, %f", value1, value2, value3);
+			printf("sum: %f, %f, %f, %f", value1, value2, value3, value4);
 	}
 }
 
 template<typename T> 
-void cuda_doAdd2(int count, int blockCount, int threadCount)
+void cuda_doAdd_indep(int count, int blockCount, int threadCount)
 {
-	kernel_doAdd2<T><<<blockCount, threadCount>>>(count);
+	kernel_doAdd_indep<T><<<blockCount, threadCount>>>(count);
 }
 
 template<typename T> 
-__global__ void kernel_doAddMulMix(int count)
+__global__ void kernel_doMad(int count)
 {
-	int bulkCount = count >> 5;
+	int bulkCount = count >> 6;
 	for (int i = 0; i < bulkCount; i++)
 	{
-		T value1 = i, value2 = (T)1.0 + i;
-		value1 = value1 + value1;
-		value2 = value2 * value2;
-		value1 = value1 + value1;
-		value2 = value2 * value2;
-		value1 = value1 + value1;
-		value2 = value2 * value2;
-		value1 = value1 + value1;
-		value2 = value2 * value2;
-		value1 = value1 + value1;
-		value2 = value2 * value2;
-		value1 = value1 + value1;
-		value2 = value2 * value2;
-		value1 = value1 + value1;
-		value2 = value2 * value2;
-		value1 = value1 + value1;
-		value2 = value2 * value2;
-		value1 = value1 + value1;
-		value2 = value2 * value2;
-		value1 = value1 + value1;
-		value2 = value2 * value2;
-		value1 = value1 + value1;
-		value2 = value2 * value2;
-		value1 = value1 + value1;
-		value2 = value2 * value2;
-		value1 = value1 + value1;
-		value2 = value2 * value2;
-		value1 = value1 + value1;
-		value2 = value2 * value2;
-		value1 = value1 + value1;
-		value2 = value2 * value2;
-		value1 = value1 + value1;
+		T value1 = i, value2 = i + (T)1.0, value3 = i + (T)2.0, value4 = i + (T)3.0;
+		value1 = value1 + value1 * value1;
+		value2 = value2 + value2 * value2;
+		value3 = value3 + value3 * value3;
+		value4 = value4 + value4 * value4;
+		value1 = value1 + value1 * value1;
+		value2 = value2 + value2 * value2;
+		value3 = value3 + value3 * value3;
+		value4 = value4 + value4 * value4;
+		value1 = value1 + value1 * value1;
+		value2 = value2 + value2 * value2;
+		value3 = value3 + value3 * value3;
+		value4 = value4 + value4 * value4;
+		value1 = value1 + value1 * value1;
+		value2 = value2 + value2 * value2;
+		value3 = value3 + value3 * value3;
+		value4 = value4 + value4 * value4;
+		value1 = value1 + value1 * value1;
+		value2 = value2 + value2 * value2;
+		value3 = value3 + value3 * value3;
+		value4 = value4 + value4 * value4;
+		value1 = value1 + value1 * value1;
+		value2 = value2 + value2 * value2;
+		value3 = value3 + value3 * value3;
+		value4 = value4 + value4 * value4;
+		value1 = value1 + value1 * value1;
+		value2 = value2 + value2 * value2;
+		value3 = value3 + value3 * value3;
+		value4 = value4 + value4 * value4;
+		value1 = value1 + value1 * value1;
+		value2 = value2 + value2 * value2;
+		value3 = value3 + value3 * value3;
+		value4 = value4 + value4 * value4;
 		if (threadIdx.x > 1024) // to avoid removal by optimization
-			printf("sum: %f, %f", value1, value2);
+			printf("sum: %f,%f,%f,%f", value1, value2, value3, value4);
 	}
 }
 
 template<typename T> 
-void cuda_doAddMulMix(int count, int blockCount, int threadCount)
+void cuda_doMad(int count, int blockCount, int threadCount)
 {
-	kernel_doAddMulMix<T><<<blockCount, threadCount>>>(count);
+	kernel_doMad<T><<<blockCount, threadCount>>>(count);
+}
+
+template<typename T> 
+__global__ void kernel_doMadSF(int count)
+{
+	int bulkCount = count >> 6;
+	for (int i = 0; i < bulkCount; i++)
+	{
+		T value1 = i, value2 = i + (T)1.0, value3 = i + (T)2.0, value4 = i + (T)3.0;
+		value1 = value1 + value1 * value1;
+		value2 = sin(value2);
+		value3 = sqrt(value3);
+		value4 = value4 / value4;
+		value1 = value1 + value1 * value1;
+		value2 = sin(value2);
+		value3 = sqrt(value3);
+		value4 = value4 / value4;
+		value1 = value1 + value1 * value1;
+		value2 = sin(value2);
+		value3 = sqrt(value3);
+		value4 = value4 / value4;
+		value1 = value1 + value1 * value1;
+		value2 = sin(value2);
+		value3 = sqrt(value3);
+		value4 = value4 / value4;
+		value1 = value1 + value1 * value1;
+		value2 = sin(value2);
+		value3 = sqrt(value3);
+		value4 = value4 / value4;
+		value1 = value1 + value1 * value1;
+		value2 = sin(value2);
+		value3 = sqrt(value3);
+		value4 = value4 / value4;
+		value1 = value1 + value1 * value1;
+		value2 = sin(value2);
+		value3 = sqrt(value3);
+		value4 = value4 / value4;
+		value1 = value1 + value1 * value1;
+		value2 = sin(value2);
+		value3 = sqrt(value3);
+		value4 = value4 / value4;
+		value1 = value1 + value1 * value1;
+		value2 = sin(value2);
+		value3 = sqrt(value3);
+		value4 = value4 / value4;
+		value1 = value1 + value1 * value1;
+		value2 = sin(value2);
+		value3 = sqrt(value3);
+		value4 = value4 / value4;
+		value1 = value1 + value1 * value1;
+		value2 = sin(value2);
+		value3 = sqrt(value3);
+		value4 = value4 / value4;
+		value1 = value1 + value1 * value1;
+		value2 = sin(value2);
+		value3 = sqrt(value3);
+		value4 = value4 / value4;
+		value1 = value1 + value1 * value1;
+		value2 = sin(value2);
+		value3 = sqrt(value3);
+		value4 = value4 / value4;
+		if (threadIdx.x > 1024) // to avoid removal by optimization
+			printf("sum: %f,%f,%f,%f", value1, value2, value3, value4);
+	}
+}
+
+template<typename T> 
+void cuda_doMadSF(int count, int blockCount, int threadCount)
+{
+	kernel_doMadSF<T><<<blockCount, threadCount>>>(count);
 }
 
 template<typename T> 
@@ -590,10 +744,10 @@ double cuda_doDynamicTinyTask(int blockCount, int threadCount, bool waitForCompl
 #endif
 
 // template instantiation
-template void cuda_reductionSum<int>(int *, int *, int, int, int, int);
-template void cuda_reductionSum<__int64>(__int64 *, __int64 *, int, int, int, int);
-template void cuda_reductionSum<float>(float *, float *, int, int, int, int);
-template void cuda_reductionSum<double>(double *, double *, int, int, int, int);
+template void cuda_reductionSum<int>(int *, int *, int *, int, int, int, int);
+template void cuda_reductionSum<__int64>(__int64 *, __int64 *, __int64 *, int, int, int, int);
+template void cuda_reductionSum<float>(float *, float *, float *, int, int, int, int);
+template void cuda_reductionSum<double>(double *, double *, double *, int, int, int, int);
 
 template void cuda_alignedRead<int>(int *, int, int, int, int);
 template void cuda_alignedRead<__int64>(__int64 *, int, int, int, int);
@@ -615,18 +769,35 @@ template void cuda_notAlignedWrite<__int64>(__int64 *, int, int, int, int);
 template void cuda_notAlignedWrite<float>(float *, int, int, int, int);
 template void cuda_notAlignedWrite<double>(double *, int, int, int, int);
 
+template void cuda_doAdd<int>(int, int, int);
+template void cuda_doAdd<__int64>(int, int, int);
 template void cuda_doAdd<float>(int, int, int);
 template void cuda_doAdd<double>(int, int, int);
-template void cuda_doAdd2<float>(int, int, int);
-template void cuda_doAdd2<double>(int, int, int);
-template void cuda_doAddMulMix<float>(int, int, int);
-template void cuda_doAddMulMix<double>(int, int, int);
 
+template void cuda_doAdd_indep<int>(int, int, int);
+template void cuda_doAdd_indep<__int64>(int, int, int);
+template void cuda_doAdd_indep<float>(int, int, int);
+template void cuda_doAdd_indep<double>(int, int, int);
+
+template void cuda_doMad<int>(int, int, int);
+template void cuda_doMad<__int64>(int, int, int);
+template void cuda_doMad<float>(int, int, int);
+template void cuda_doMad<double>(int, int, int);
+
+template void cuda_doMadSF<float>(int, int, int);
+template void cuda_doMadSF<double>(int, int, int);
+
+template void cuda_doMul<int>(int, int, int);
+template void cuda_doMul<__int64>(int, int, int);
 template void cuda_doMul<float>(int, int, int);
 template void cuda_doMul<double>(int, int, int);
 
+template void cuda_doDiv<int>(int, int, int);
+template void cuda_doDiv<__int64>(int, int, int);
 template void cuda_doDiv<float>(int, int, int);
 template void cuda_doDiv<double>(int, int, int);
 
 template void cuda_doSin<float>(int, int, int);
 template void cuda_doSin<double>(int, int, int);
+
+#endif
